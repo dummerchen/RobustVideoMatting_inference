@@ -33,6 +33,7 @@ protected:
         "r4i",
         "downsample_ratio"
     };
+    float all_time=0;
     // init dynamic input dims
     std::vector<std::vector<int64_t>> dynamic_input_node_dims = {
         {1, 3, 1280, 720}, // src  (b=1,c,h,w)
@@ -73,7 +74,7 @@ public:
     RobustVideoMatting() =delete;
     RobustVideoMatting(wstring _onnx_path, int num_threads);
     void detect(const cv::Mat& mat, MattingContent& content,
-        float downsample_ratio = 0.25f, bool video_mode = false);
+        float downsample_ratio = 0.25f, bool video_mode = false,int frame=0);
 
     void detect_video(const std::string& video_path,
         const std::string& output_path,

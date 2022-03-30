@@ -13,10 +13,14 @@ RobustVideoMatting::RobustVideoMatting(wstring onnx_path,int num_threads)
     ort_env = Ort::Env();
     // 0. session options
     Ort::SessionOptions session_options;
+    //session_options.SetExecutionMode(ExecutionMode::ORT_PARALLEL);
+    
     session_options.SetIntraOpNumThreads(num_threads);
+    //session_options.SetInterOpNumThreads(num_threads);
     session_options.SetGraphOptimizationLevel(
-        GraphOptimizationLevel::ORT_ENABLE_EXTENDED);
+        GraphOptimizationLevel::ORT_ENABLE_ALL);
     session_options.SetLogSeverityLevel(4);
+    
     // 1. session
     // GPU Compatibility
     ort_session=Ort::Session(ort_env, onnx_path.c_str(), session_options);
@@ -153,7 +157,7 @@ std::vector<Ort::Value> RobustVideoMatting::transform(const cv::Mat &mat)
 }
 
 void RobustVideoMatting::detect(const cv::Mat &mat, MattingContent &content,
-                                float downsample_ratio, bool video_mode)
+                                float downsample_ratio, bool video_mode,int frame)
 {
     if (mat.empty()) return;
     // 0. set dsr at runtime.
@@ -162,6 +166,7 @@ void RobustVideoMatting::detect(const cv::Mat &mat, MattingContent &content,
     // 1. make input tensors, src, rxi, dsr
     std::vector<Ort::Value> input_tensors = this->transform(mat);
     // 2. inference, fgr, pha, rxo. 200ms
+
     clock_t start1_time = clock();
     auto output_tensors = ort_session.Run(
         Ort::RunOptions{nullptr}, input_node_names.data(),
@@ -169,23 +174,18 @@ void RobustVideoMatting::detect(const cv::Mat &mat, MattingContent &content,
         num_outputs
     );
     clock_t end1_time = clock();
-
+    if (frame > 5)
+        all_time += (end1_time - start1_time) / 1000.0;
     // 3. generate matting
-    clock_t start2_time = clock();
+    // mat bgr
     this->generate_matting(output_tensors, content,mat);
     // 4. update context (needed for video detection.)
-    clock_t end2_time = clock();
-    clock_t start3_time = clock();
     if (video_mode)
     {
         context_is_update = false; // init state.
         this->update_context(output_tensors);
     }
-    clock_t end3_time = clock();
-    cout<<"model runtime:" << (end1_time - start1_time) / 1000.0<<"/ms "
-        <<"merge:"<<(end2_time - start2_time) / 1000.0 <<"/ms" << endl;
-
-
+    //cout<<"model runtime:" << (end1_time - start1_time) / 1000.0<<"/s "<< endl;
 }
 
 
@@ -221,21 +221,24 @@ void RobustVideoMatting::detect_video(const std::string &video_path,
     {
         i += 1;
         //#pragma omp parallel 
-            MattingContent content;
-            cout << i << "/" << frame_count << " ";
-            this->detect(mat, content, downsample_ratio, true); // video_mode true
-            // 3. save contents and writing out.
-            if (content.flag)
-            {
-                if (save_contents)
-                    contents.push_back(content);
-                video_writer.write(content.merge_mat);
-            }
+        MattingContent content;
+        cout << i << "/" << frame_count<<endl;
+        
+        this->detect(mat, content, downsample_ratio, true,i); // video_mode true
+        
+
+        // 3. save contents and writing out.
+        if (content.flag)
+        {
+            if (save_contents)
+                contents.push_back(content);
+            video_writer.write(content.merge_mat);
+        }
         // 4. check context states.
         if (!context_is_update) break;
         
     }
-
+    cout << "mean cost time:" << all_time/frame_count<<"/m" << endl;
     // 5. release
     video_capture.release();
     video_writer.release();
@@ -263,17 +266,15 @@ void RobustVideoMatting::generate_matting(std::vector<Ort::Value> &output_tensor
     cv::Mat pmat(height, width, CV_32FC1, pha_ptr);
     cv::Mat fimg;
     raw_image.convertTo(fimg,CV_32FC1);
-    //rmat *= 255.;
-    //bmat *= 255.;
-    //gmat *= 255.;
     cv::Mat rest =cv::Scalar(1.)-pmat;
     std::vector<cv::Mat1f> channels;
     cv::split(fimg,channels);
     // 255¾ÍÊÇºÚÉ«
-    cv::Mat mbmat = channels[2].mul(pmat) + rest.mul(cv::Scalar(153.));
+    cv::Mat mbmat = channels[0].mul(pmat) + rest.mul(cv::Scalar(153.));
     cv::Mat mgmat = channels[1].mul(pmat) + rest.mul(cv::Scalar(255.));
-    cv::Mat mrmat = channels[0].mul(pmat) + rest.mul(cv::Scalar(120.));
-    std::vector<cv::Mat> fgr_channel_mats, merge_channel_mats;
+    cv::Mat mrmat = channels[2].mul(pmat) + rest.mul(cv::Scalar(120.));
+    //std::vector<cv::Mat> fgr_channel_mats;
+    vector<cv::Mat> merge_channel_mats;
     //fgr_channel_mats.push_back(bmat);
     //fgr_channel_mats.push_back(gmat);
     //fgr_channel_mats.push_back(rmat);
@@ -282,14 +283,14 @@ void RobustVideoMatting::generate_matting(std::vector<Ort::Value> &output_tensor
     merge_channel_mats.push_back(mrmat);
 
     content.pha_mat = pmat;
-    cv::Mat fgr_,merge_;
+    //cv::Mat fgr_,merge_;
     //cv::merge(fgr_channel_mats, content.fgr_mat);
 
     cv::merge(merge_channel_mats, content.merge_mat);
-    content.fgr_mat.convertTo(content.fgr_mat, CV_8UC3);
+    //content.fgr_mat.convertTo(content.fgr_mat, CV_8UC3);
     content.merge_mat.convertTo(content.merge_mat, CV_8UC3);
-    fgr_ = content.fgr_mat;
-    merge_ = content.merge_mat;
+    //fgr_ = content.fgr_mat;
+    //merge_ = content.merge_mat;
     content.flag = true;
 }
 

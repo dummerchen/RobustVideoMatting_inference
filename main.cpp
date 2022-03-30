@@ -8,11 +8,11 @@ using namespace std;
 
 DEFINE_string(onnx_path, "./onnx/rvm_mobilenetv3_fp32.onnx", "model path");
 //DEFINE_string(onnx_path, "./onnx/modnet.onnx", "model path");
-//DEFINE_string(test_path, "E:\\py_exercise\\service_project/datasets/images/3.png", "test path");
+//DEFINE_string(test_path, "E:\\py_exercise\\service_project/datasets/images/4.png", "test path");
 
-DEFINE_string(test_path, "../datasets/test/TEST_05.mp4", "test path");
+DEFINE_string(test_path, "../datasets/test/TEST_10.mp4", "test path");
 //DEFINE_string(output_path,"")
-DEFINE_int32(num_thread, 8, "threads nums");
+DEFINE_int32(num_thread, 16, "threads nums");
 
 vector <string> split_name(string path)
 {
@@ -34,8 +34,9 @@ vector <string> split_name(string path)
 
 int main(int argc,char ** argv)
 {
-    google::ParseCommandLineFlags(&argc, &argv, true);
     google::SetUsageMessage("Please attention  : string cmd line args without quota");
+    google::ParseCommandLineFlags(&argc, &argv, true);
+    
     wstring_convert < codecvt_utf8_utf16<wchar_t> > converter;
     wstring path = converter.from_bytes(FLAGS_onnx_path);
     RobustVideoMatting rvm(path, 8); // 16 threads
@@ -60,7 +61,7 @@ int main(int argc,char ** argv)
         // 预测的前景pha
          cv::imwrite("mask_" + test_info[0], content.pha_mat * 255.);
         // 合成图
-        //cv::imwrite("./results/" + image_or_video + "/merge_" + test_info[0],content.merge_mat);
+        cv::imwrite("merge_" + test_info[0],content.merge_mat);
     }
     else
     {
@@ -68,7 +69,7 @@ int main(int argc,char ** argv)
         image_or_video = "video";
         rvm.detect_video(
             FLAGS_test_path,
-            test_info[0],
+            "c_"+test_info[0],
             contents, false, 0.25, 30
         );
     }

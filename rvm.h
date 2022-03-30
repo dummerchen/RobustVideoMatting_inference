@@ -25,6 +25,7 @@ protected:
         OrtArenaAllocator, OrtMemTypeDefault);
     // hardcode input node names
     unsigned int num_inputs = 6;
+    int tot=0;
     std::vector<const char *> input_node_names = {
         "src",
         "r1i",
@@ -95,19 +96,3 @@ public:
     void update_context(std::vector<Ort::Value>& output_tensors);
 
  };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

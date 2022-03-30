@@ -112,7 +112,7 @@ std::vector<Ort::Value> RobustVideoMatting::transform(const cv::Mat &mat)
     src_dims.at(3) = img_width;
     // assume that rxi's dims and value_handler was updated by last step in a while loop.
     std::vector<int64_t> &r1i_dims = dynamic_input_node_dims.at(1); // (1,?,?h,?w)
-    std::vector<int64_t> &r2i_dims = dynamic_input_node_dims.at(2); // (1,?,?h,?w)
+    std::vector<int64_t> &r2i_dims = dynamic_input_node_dims.at(2); // (1,?,?h,-?w)
     std::vector<int64_t> &r3i_dims = dynamic_input_node_dims.at(3); // (1,?,?h,?w)
     std::vector<int64_t> &r4i_dims = dynamic_input_node_dims.at(4); // (1,?,?h,?w)
     std::vector<int64_t> &dsr_dims = dynamic_input_node_dims.at(5); // (1)
@@ -127,7 +127,9 @@ std::vector<Ort::Value> RobustVideoMatting::transform(const cv::Mat &mat)
     // normalize & RGB
     cv::cvtColor(src, src, cv::COLOR_BGR2RGB); // (h,w,3)
     src.convertTo(src, CV_32FC3, 1.0f / 255.0f, 0.f); // 0.~1.
-
+    //src = (src - 0.5) / 0.5;
+    
+    cv::blur(src, src,cv::Size(3,3));
     // convert to tensor.
     std::vector<Ort::Value> input_tensors;
     input_tensors.emplace_back(create_tensor(
@@ -156,8 +158,8 @@ std::vector<Ort::Value> RobustVideoMatting::transform(const cv::Mat &mat)
     return input_tensors;
 }
 
-void RobustVideoMatting::detect(const cv::Mat &mat, MattingContent &content,
-                                float downsample_ratio, bool video_mode,int frame)
+void RobustVideoMatting::detect(const cv::Mat& mat, MattingContent& content,
+    float downsample_ratio, bool video_mode, int frame)
 {
     if (mat.empty()) return;
     // 0. set dsr at runtime.
@@ -169,13 +171,21 @@ void RobustVideoMatting::detect(const cv::Mat &mat, MattingContent &content,
 
     clock_t start1_time = clock();
     auto output_tensors = ort_session.Run(
-        Ort::RunOptions{nullptr}, input_node_names.data(),
+        Ort::RunOptions{ nullptr }, input_node_names.data(),
         input_tensors.data(), num_inputs, output_node_names.data(),
         num_outputs
     );
     clock_t end1_time = clock();
-    if (frame > 5)
-        all_time += (end1_time - start1_time) / 1000.0;
+    float temp = (end1_time - start1_time) / 1000.0;
+    cout << temp ;
+    if (frame > 5&& temp<0.4)
+    {
+        all_time += temp;
+        tot += 1;
+        cout << endl;
+    }
+    else
+        cout << endl;
     // 3. generate matting
     // mat bgr
     this->generate_matting(output_tensors, content,mat);
@@ -222,7 +232,7 @@ void RobustVideoMatting::detect_video(const std::string &video_path,
         i += 1;
         //#pragma omp parallel 
         MattingContent content;
-        cout << i << "/" << frame_count<<endl;
+        cout << i << "/" << frame_count<<" ";
         
         this->detect(mat, content, downsample_ratio, true,i); // video_mode true
         
@@ -238,7 +248,7 @@ void RobustVideoMatting::detect_video(const std::string &video_path,
         if (!context_is_update) break;
         
     }
-    cout << "mean cost time:" << all_time/frame_count<<"/m" << endl;
+    cout << "mean cost time:" << all_time/tot<<"/m" << endl;
     // 5. release
     video_capture.release();
     video_writer.release();
@@ -264,8 +274,11 @@ void RobustVideoMatting::generate_matting(std::vector<Ort::Value> &output_tensor
     //cv::Mat gmat(height, width, CV_32FC1, fgr_ptr + channel_step);
     //cv::Mat bmat(height, width, CV_32FC1, fgr_ptr + 2 * channel_step);
     cv::Mat pmat(height, width, CV_32FC1, pha_ptr);
+
+    cv::threshold(pmat, pmat,0.32,1,cv::THRESH_TOZERO);
     cv::Mat fimg;
     raw_image.convertTo(fimg,CV_32FC1);
+    //cv::threshold(pmat, pmat, 250, 255, cv::THRESH_BINARY);
     cv::Mat rest =cv::Scalar(1.)-pmat;
     std::vector<cv::Mat1f> channels;
     cv::split(fimg,channels);

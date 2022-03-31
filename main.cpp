@@ -10,7 +10,7 @@ DEFINE_string(onnx_path, "./onnx/rvm_mobilenetv3_fp32.onnx", "model path");
 //DEFINE_string(onnx_path, "./onnx/modnet.onnx", "model path");
 //DEFINE_string(test_path, "E:\\py_exercise\\service_project/datasets/images/4.png", "test path");
 
-DEFINE_string(test_path, "../datasets/test/TEST_10.mp4", "test path");
+DEFINE_string(test_path, "../datasets/test/TEST_18.mp4", "test path");
 //DEFINE_string(output_path,"")
 DEFINE_int32(num_thread, 16, "threads nums");
 

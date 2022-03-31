@@ -248,7 +248,7 @@ void RobustVideoMatting::detect_video(const std::string &video_path,
         if (!context_is_update) break;
         
     }
-    cout << "mean cost time:" << all_time/tot<<"/m" << endl;
+    cout << "mean cost time:" << all_time/tot<<"/s" << endl;
     // 5. release
     video_capture.release();
     video_writer.release();

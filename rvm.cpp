@@ -13,10 +13,9 @@ RobustVideoMatting::RobustVideoMatting(wstring onnx_path,int num_threads)
     ort_env = Ort::Env();
     // 0. session options
     Ort::SessionOptions session_options;
-    //session_options.SetExecutionMode(ExecutionMode::ORT_PARALLEL);
-    
+    session_options.SetExecutionMode(ExecutionMode::ORT_SEQUENTIAL);
     session_options.SetIntraOpNumThreads(num_threads);
-    //session_options.SetInterOpNumThreads(num_threads);
+    session_options.SetInterOpNumThreads(num_threads);
     session_options.SetGraphOptimizationLevel(
         GraphOptimizationLevel::ORT_ENABLE_ALL);
     session_options.SetLogSeverityLevel(4);
@@ -128,8 +127,7 @@ std::vector<Ort::Value> RobustVideoMatting::transform(const cv::Mat &mat)
     cv::cvtColor(src, src, cv::COLOR_BGR2RGB); // (h,w,3)
     src.convertTo(src, CV_32FC3, 1.0f / 255.0f, 0.f); // 0.~1.
     //src = (src - 0.5) / 0.5;
-    
-    cv::blur(src, src,cv::Size(3,3));
+    //cv::blur(src, src,cv::Size(3,3));
     // convert to tensor.
     std::vector<Ort::Value> input_tensors;
     input_tensors.emplace_back(create_tensor(
@@ -167,7 +165,7 @@ void RobustVideoMatting::detect(const cv::Mat& mat, MattingContent& content,
 
     // 1. make input tensors, src, rxi, dsr
     std::vector<Ort::Value> input_tensors = this->transform(mat);
-    // 2. inference, fgr, pha, rxo. 200ms
+    // 2. inference pha
 
     clock_t start1_time = clock();
     auto output_tensors = ort_session.Run(
@@ -178,7 +176,7 @@ void RobustVideoMatting::detect(const cv::Mat& mat, MattingContent& content,
     clock_t end1_time = clock();
     float temp = (end1_time - start1_time) / 1000.0;
     cout << temp ;
-    if (frame > 5&& temp<0.4)
+    if (frame > 5&& temp<0.45)
     {
         all_time += temp;
         tot += 1;
@@ -189,20 +187,13 @@ void RobustVideoMatting::detect(const cv::Mat& mat, MattingContent& content,
     // 3. generate matting
     // mat bgr
     this->generate_matting(output_tensors, content,mat);
-    // 4. update context (needed for video detection.)
-    if (video_mode)
-    {
-        context_is_update = false; // init state.
-        this->update_context(output_tensors);
-    }
-    //cout<<"model runtime:" << (end1_time - start1_time) / 1000.0<<"/s "<< endl;
+
 }
 
 
 void RobustVideoMatting::detect_video(const std::string &video_path,
                                       const std::string &output_path,
-                                      std::vector<MattingContent> &contents,
-                                      bool save_contents, float downsample_ratio,
+                                      float downsample_ratio,
                                       unsigned int writer_fps)
 {
     // 0. init video capture
@@ -240,15 +231,10 @@ void RobustVideoMatting::detect_video(const std::string &video_path,
         // 3. save contents and writing out.
         if (content.flag)
         {
-            if (save_contents)
-                contents.push_back(content);
             video_writer.write(content.merge_mat);
         }
-        // 4. check context states.
-        if (!context_is_update) break;
-        
     }
-    cout << "mean cost time:" << all_time/tot<<"/s" << endl;
+    cout << "mean cost time:" << all_time/tot<<" s/frame" << endl;
     // 5. release
     video_capture.release();
     video_writer.release();
@@ -258,27 +244,20 @@ void RobustVideoMatting::detect_video(const std::string &video_path,
 void RobustVideoMatting::generate_matting(std::vector<Ort::Value> &output_tensors,
                                           MattingContent &content,cv::Mat raw_image)
 {
-    //Ort::Value &fgr = output_tensors.at(0); // fgr (1,3,h,w) 0.~1.
-    Ort::Value &pha = output_tensors.at(1); // pha (1,1,h,w) 0.~1.
-    //auto fgr_dims = fgr.GetTypeInfo().GetTensorTypeAndShapeInfo().GetShape();
+    Ort::Value &pha = output_tensors.at(0); // pha (1,1,h,w) 0.~1.
     auto pha_dims = pha.GetTypeInfo().GetTensorTypeAndShapeInfo().GetShape();
-    //const unsigned int height = fgr_dims.at(2); // output height
-    //const unsigned int width = fgr_dims.at(3); // output width
+    
     const unsigned int height = raw_image.rows;
     const unsigned int width = raw_image.cols;
     const unsigned int channel_step = height * width;
-    // fast assign & channel transpose(CHW->HWC).
-    //float *fgr_ptr = fgr.GetTensorMutableData<float>();
+
     float *pha_ptr = pha.GetTensorMutableData<float>();
-    //cv::Mat rmat(height, width, CV_32FC1, fgr_ptr);
-    //cv::Mat gmat(height, width, CV_32FC1, fgr_ptr + channel_step);
-    //cv::Mat bmat(height, width, CV_32FC1, fgr_ptr + 2 * channel_step);
+
     cv::Mat pmat(height, width, CV_32FC1, pha_ptr);
 
     cv::threshold(pmat, pmat,0.32,1,cv::THRESH_TOZERO);
     cv::Mat fimg;
     raw_image.convertTo(fimg,CV_32FC1);
-    //cv::threshold(pmat, pmat, 250, 255, cv::THRESH_BINARY);
     cv::Mat rest =cv::Scalar(1.)-pmat;
     std::vector<cv::Mat1f> channels;
     cv::split(fimg,channels);
@@ -286,60 +265,14 @@ void RobustVideoMatting::generate_matting(std::vector<Ort::Value> &output_tensor
     cv::Mat mbmat = channels[0].mul(pmat) + rest.mul(cv::Scalar(153.));
     cv::Mat mgmat = channels[1].mul(pmat) + rest.mul(cv::Scalar(255.));
     cv::Mat mrmat = channels[2].mul(pmat) + rest.mul(cv::Scalar(120.));
-    //std::vector<cv::Mat> fgr_channel_mats;
     vector<cv::Mat> merge_channel_mats;
-    //fgr_channel_mats.push_back(bmat);
-    //fgr_channel_mats.push_back(gmat);
-    //fgr_channel_mats.push_back(rmat);
     merge_channel_mats.push_back(mbmat);
     merge_channel_mats.push_back(mgmat);
     merge_channel_mats.push_back(mrmat);
 
     content.pha_mat = pmat;
-    //cv::Mat fgr_,merge_;
-    //cv::merge(fgr_channel_mats, content.fgr_mat);
 
     cv::merge(merge_channel_mats, content.merge_mat);
-    //content.fgr_mat.convertTo(content.fgr_mat, CV_8UC3);
     content.merge_mat.convertTo(content.merge_mat, CV_8UC3);
-    //fgr_ = content.fgr_mat;
-    //merge_ = content.merge_mat;
     content.flag = true;
-}
-
-
-void RobustVideoMatting::update_context(std::vector<Ort::Value> &output_tensors)
-{
-    // 0. update context for video matting.
-    Ort::Value &r1o = output_tensors.at(2); // fgr (1,?,?h,?w)
-    Ort::Value &r2o = output_tensors.at(3); // pha (1,?,?h,?w)
-    Ort::Value &r3o = output_tensors.at(4); // pha (1,?,?h,?w)
-    Ort::Value &r4o = output_tensors.at(5); // pha (1,?,?h,?w)
-    auto r1o_dims = r1o.GetTypeInfo().GetTensorTypeAndShapeInfo().GetShape();
-    auto r2o_dims = r2o.GetTypeInfo().GetTensorTypeAndShapeInfo().GetShape();
-    auto r3o_dims = r3o.GetTypeInfo().GetTensorTypeAndShapeInfo().GetShape();
-    auto r4o_dims = r4o.GetTypeInfo().GetTensorTypeAndShapeInfo().GetShape();
-    // 1. update rxi's shape according to last rxo
-    dynamic_input_node_dims.at(1) = r1o_dims;
-    dynamic_input_node_dims.at(2) = r2o_dims;
-    dynamic_input_node_dims.at(3) = r3o_dims;
-    dynamic_input_node_dims.at(4) = r4o_dims;
-    // 2. update rxi's value according to last rxo
-    int64_t new_r1i_value_size = this->value_size_of(r1o_dims); // (1*?*?h*?w)
-    int64_t new_r2i_value_size = this->value_size_of(r2o_dims); // (1*?*?h*?w)
-    int64_t new_r3i_value_size = this->value_size_of(r3o_dims); // (1*?*?h*?w)
-    int64_t new_r4i_value_size = this->value_size_of(r4o_dims); // (1*?*?h*?w)
-    dynamic_r1i_value_handler.resize(new_r1i_value_size);
-    dynamic_r2i_value_handler.resize(new_r2i_value_size);
-    dynamic_r3i_value_handler.resize(new_r3i_value_size);
-    dynamic_r4i_value_handler.resize(new_r4i_value_size);
-    float *new_r1i_value_ptr = r1o.GetTensorMutableData<float>();
-    float *new_r2i_value_ptr = r2o.GetTensorMutableData<float>();
-    float *new_r3i_value_ptr = r3o.GetTensorMutableData<float>();
-    float *new_r4i_value_ptr = r4o.GetTensorMutableData<float>();
-    std::memcpy(dynamic_r1i_value_handler.data(), new_r1i_value_ptr, new_r1i_value_size * sizeof(float));
-    std::memcpy(dynamic_r2i_value_handler.data(), new_r2i_value_ptr, new_r2i_value_size * sizeof(float));
-    std::memcpy(dynamic_r3i_value_handler.data(), new_r3i_value_ptr, new_r3i_value_size * sizeof(float));
-    std::memcpy(dynamic_r4i_value_handler.data(), new_r4i_value_ptr, new_r4i_value_size * sizeof(float));
-    context_is_update = true;
 }

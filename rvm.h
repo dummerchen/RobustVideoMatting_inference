@@ -46,18 +46,13 @@ protected:
     }; // (1, 16, ?h, ?w) for inner loop rxi
 
     // hardcode output node names
-    unsigned int num_outputs = 6;
+    //unsigned int num_outputs = 6;
+    unsigned int num_outputs = 1;
     std::vector<const char *> output_node_names = {
-        "fgr",
         "pha",
-        "r1o",
-        "r2o",
-        "r3o",
-        "r4o"
     };
+
     wstring onnx_path;
-    //const char *log_id = nullptr;
-    bool context_is_update = false;
 
     // input values handler & init
     std::vector<float> dynamic_src_value_handler;
@@ -74,13 +69,12 @@ protected:
 public:
     RobustVideoMatting() =delete;
     RobustVideoMatting(wstring _onnx_path, int num_threads);
+
     void detect(const cv::Mat& mat, MattingContent& content,
         float downsample_ratio = 0.25f, bool video_mode = false,int frame=0);
 
     void detect_video(const std::string& video_path,
         const std::string& output_path,
-        std::vector<MattingContent>& contents,
-        bool save_contents = false,
         float downsample_ratio = 0.25f,
         unsigned int writer_fps = 30);
 
@@ -92,7 +86,4 @@ public:
     int64_t value_size_of(vector<int64_t>& dims); // get value size
     void generate_matting(std::vector<Ort::Value>& output_tensors,
         MattingContent& content,cv::Mat raw_image);
-
-    void update_context(std::vector<Ort::Value>& output_tensors);
-
  };

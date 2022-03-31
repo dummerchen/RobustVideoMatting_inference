@@ -12,7 +12,7 @@ DEFINE_string(onnx_path, "./onnx/rvm_mobilenetv3_fp32.onnx", "model path");
 
 DEFINE_string(test_path, "../datasets/test/TEST_18.mp4", "test path");
 //DEFINE_string(output_path,"")
-DEFINE_int32(num_thread, 16, "threads nums");
+DEFINE_int32(num_thread, 6, "threads nums");
 
 vector <string> split_name(string path)
 {
@@ -39,7 +39,7 @@ int main(int argc,char ** argv)
     
     wstring_convert < codecvt_utf8_utf16<wchar_t> > converter;
     wstring path = converter.from_bytes(FLAGS_onnx_path);
-    RobustVideoMatting rvm(path, 8); // 16 threads
+    RobustVideoMatting rvm(path, FLAGS_num_thread); // 16 threads
     
     string image_or_video, suffix, name;
     vector<string> test_info = split_name(FLAGS_test_path);
@@ -52,12 +52,9 @@ int main(int argc,char ** argv)
         image_or_video = "image";
         cv::Mat img_bgr = cv::imread(FLAGS_test_path);
         clock_t start_time = clock();
-        rvm.detect(img_bgr, content, 0.25f,false);
+        rvm.detect(img_bgr, content, 0.25f);
         clock_t end_time = clock();
-        //std::cout << (end_time - start_time) / 1000.0 << std::endl;
-        // 预测的前景fgr
-
-        //cv::imwrite("./results/" + image_or_video + "/fgr_" + test_info[0],content.fgr_mat);
+        std::cout << (end_time - start_time) / 1000.0 <<" s/frame" << endl;
         // 预测的前景pha
          cv::imwrite("mask_" + test_info[0], content.pha_mat * 255.);
         // 合成图
@@ -65,12 +62,11 @@ int main(int argc,char ** argv)
     }
     else
     {
-        std::vector<MattingContent> contents;
         image_or_video = "video";
         rvm.detect_video(
             FLAGS_test_path,
-            "c_"+test_info[0],
-            contents, false, 0.25, 30
+            test_info[0],
+            0.25, 30
         );
     }
     system("pause");

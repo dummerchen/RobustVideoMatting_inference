@@ -5,7 +5,10 @@
 #include "rvm.h"
 #include<bits/stdc++.h>
 #include<omp.h>
+#include<gflags\gflags.h>
 using namespace std;
+
+
 
 RobustVideoMatting::RobustVideoMatting(wstring onnx_path,int num_threads)
 {
@@ -190,6 +193,7 @@ void RobustVideoMatting::detect(const cv::Mat& mat, MattingContent& content,
 
 }
 
+DECLARE_bool(rgb);
 
 void RobustVideoMatting::detect_video(const std::string &video_path,
                                       const std::string &output_path,
@@ -209,7 +213,7 @@ void RobustVideoMatting::detect_video(const std::string &video_path,
     }
     // 1. init video writer
     cv::VideoWriter video_writer(output_path, cv::VideoWriter::fourcc('M', 'P', '4', 'V'),
-                                fps, S,true);
+                                fps, S,FLAGS_rgb);
     if (!video_writer.isOpened())
     {
         std::cout << "Can not open writer: " << output_path << "\n";
@@ -231,7 +235,12 @@ void RobustVideoMatting::detect_video(const std::string &video_path,
         // 3. save contents and writing out.
         if (content.flag)
         {
-            video_writer.write(content.merge_mat);
+            cv::Mat temp = content.pha_mat;
+            cv::Mat temp2 = content.merge_mat;
+             if (!FLAGS_rgb)
+                video_writer.write(content.pha_mat);
+            else
+                video_writer.write(content.merge_mat);
         }
     }
     cout << "mean cost time:" << all_time/tot<<" s/frame" << endl;
@@ -270,9 +279,10 @@ void RobustVideoMatting::generate_matting(std::vector<Ort::Value> &output_tensor
     merge_channel_mats.push_back(mgmat);
     merge_channel_mats.push_back(mrmat);
 
-    content.pha_mat = pmat;
+    content.pha_mat = pmat*255;
 
     cv::merge(merge_channel_mats, content.merge_mat);
+    content.pha_mat.convertTo(content.pha_mat, CV_8UC1);
     content.merge_mat.convertTo(content.merge_mat, CV_8UC3);
     content.flag = true;
 }

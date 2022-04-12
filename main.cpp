@@ -6,11 +6,13 @@
 #include<codecvt>
 using namespace std;
 
-//DEFINE_string(onnx_path, "./onnx/rvm_mobilenetv3_fp32.onnx", "model path");
-DEFINE_string(onnx_path, "./onnx/epoch-0.onnx", "model path");
+DEFINE_string(onnx_path, "./onnx/rvm_mobilenetv3_fp32.onnx", "where is onnx model path");
+//DEFINE_string(onnx_path, "./onnx/epoch-0.onnx", "where is onnx model path");
 DEFINE_string(test_path, "./TEST_01.mp4", "test path: image(png,jpg) or mp4");
+//DEFINE_string(test_path, "./3.png", "test path: image(png,jpg) or mp4");
 DEFINE_int32(num_thread, 6, " threads nums, use num_thread to inference");
-DEFINE_double(downsample_ratio,0.20, "downsample ratio,the smaller the more fps but lowerer resolution");
+DEFINE_double(downsample_ratio,0.25, "downsample ratio,the smaller the more fps but lowerer resolution");
+DEFINE_bool(rgb, false, "default output only mask");
 
 vector <string> split_name(string path)
 {
@@ -52,20 +54,23 @@ int main(int argc,char ** argv)
         clock_t start_time = clock();
         rvm.detect(img_bgr, content, FLAGS_downsample_ratio);
         clock_t end_time = clock();
-        std::cout << (end_time - start_time) / 1000.0 <<" s/frame" << endl;
-        // 预测的前景pha
-         cv::imwrite("mask_" + test_info[0], content.pha_mat * 255.);
-        // 合成图
-        cv::imwrite("merge_" + test_info[0],content.merge_mat);
+        std::cout << (end_time - start_time) / 1000.0 <<" ms/frame" << endl;
+        if (!FLAGS_rgb)
+            // 预测的前景pha
+            cv::imwrite("processed_" + test_info[0], content.pha_mat * 255.);
+            // 合成图
+        else
+            cv::imwrite("processed_" + test_info[0],content.merge_mat);
     }
     else
     {
         image_or_video = "video";
         rvm.detect_video(
             FLAGS_test_path,
-            "processed"+test_info[0],
+            "processed_"+test_info[0],
             FLAGS_downsample_ratio, 30
         );
+        
     }
     system("pause");
 	return 0;

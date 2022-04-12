@@ -6,13 +6,11 @@
 #include<codecvt>
 using namespace std;
 
-DEFINE_string(onnx_path, "./onnx/rvm_mobilenetv3_fp32.onnx", "model path");
-//DEFINE_string(onnx_path, "./onnx/modnet.onnx", "model path");
-//DEFINE_string(test_path, "E:\\py_exercise\\service_project/datasets/images/4.png", "test path");
-
-DEFINE_string(test_path, "../datasets/test/TEST_18.mp4", "test path");
-//DEFINE_string(output_path,"")
-DEFINE_int32(num_thread, 6, "threads nums");
+//DEFINE_string(onnx_path, "./onnx/rvm_mobilenetv3_fp32.onnx", "model path");
+DEFINE_string(onnx_path, "./onnx/epoch-0.onnx", "model path");
+DEFINE_string(test_path, "./TEST_01.mp4", "test path: image(png,jpg) or mp4");
+DEFINE_int32(num_thread, 6, " threads nums, use num_thread to inference");
+DEFINE_double(downsample_ratio,0.20, "downsample ratio,the smaller the more fps but lowerer resolution");
 
 vector <string> split_name(string path)
 {
@@ -52,7 +50,7 @@ int main(int argc,char ** argv)
         image_or_video = "image";
         cv::Mat img_bgr = cv::imread(FLAGS_test_path);
         clock_t start_time = clock();
-        rvm.detect(img_bgr, content, 0.25f);
+        rvm.detect(img_bgr, content, FLAGS_downsample_ratio);
         clock_t end_time = clock();
         std::cout << (end_time - start_time) / 1000.0 <<" s/frame" << endl;
         // Ô¤²âµÄÇ°¾°pha
@@ -65,8 +63,8 @@ int main(int argc,char ** argv)
         image_or_video = "video";
         rvm.detect_video(
             FLAGS_test_path,
-            test_info[0],
-            0.25, 30
+            "processed"+test_info[0],
+            FLAGS_downsample_ratio, 30
         );
     }
     system("pause");

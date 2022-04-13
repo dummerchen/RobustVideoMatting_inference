@@ -179,7 +179,7 @@ void RobustVideoMatting::detect(const cv::Mat& mat, MattingContent& content,
     clock_t end1_time = clock();
     float temp = (end1_time - start1_time) / 1000.0;
     cout << temp ;
-    if (frame > 5&& temp<0.45)
+    if (frame > 5)
     {
         all_time += temp;
         tot += 1;
@@ -187,8 +187,7 @@ void RobustVideoMatting::detect(const cv::Mat& mat, MattingContent& content,
     }
     else
         cout << endl;
-    // 3. generate matting
-    // mat bgr
+ 
     this->generate_matting(output_tensors, content,mat);
 
 }
@@ -235,8 +234,6 @@ void RobustVideoMatting::detect_video(const std::string &video_path,
         // 3. save contents and writing out.
         if (content.flag)
         {
-            cv::Mat temp = content.pha_mat;
-            cv::Mat temp2 = content.merge_mat;
              if (!FLAGS_rgb)
                 video_writer.write(content.pha_mat);
             else
@@ -265,24 +262,27 @@ void RobustVideoMatting::generate_matting(std::vector<Ort::Value> &output_tensor
     cv::Mat pmat(height, width, CV_32FC1, pha_ptr);
 
     cv::threshold(pmat, pmat,0.32,1,cv::THRESH_TOZERO);
-    cv::Mat fimg;
-    raw_image.convertTo(fimg,CV_32FC1);
-    cv::Mat rest =cv::Scalar(1.)-pmat;
-    std::vector<cv::Mat1f> channels;
-    cv::split(fimg,channels);
-    // 255就是黑色
-    cv::Mat mbmat = channels[0].mul(pmat) + rest.mul(cv::Scalar(153.));
-    cv::Mat mgmat = channels[1].mul(pmat) + rest.mul(cv::Scalar(255.));
-    cv::Mat mrmat = channels[2].mul(pmat) + rest.mul(cv::Scalar(120.));
-    vector<cv::Mat> merge_channel_mats;
-    merge_channel_mats.push_back(mbmat);
-    merge_channel_mats.push_back(mgmat);
-    merge_channel_mats.push_back(mrmat);
+    if (FLAGS_rgb == true)
+    {
+        cv::Mat fimg;
+        raw_image.convertTo(fimg, CV_32FC1);
+        cv::Mat rest = cv::Scalar(1.) - pmat;
+        std::vector<cv::Mat1f> channels;
+        cv::split(fimg, channels);
+        // 255就是黑色
+        cv::Mat mbmat = channels[0].mul(pmat) + rest.mul(cv::Scalar(255.));
+        cv::Mat mgmat = channels[1].mul(pmat) + rest.mul(cv::Scalar(255.));
+        cv::Mat mrmat = channels[2].mul(pmat) + rest.mul(cv::Scalar(255.));
+        vector<cv::Mat> merge_channel_mats;
+        merge_channel_mats.push_back(mbmat);
+        merge_channel_mats.push_back(mgmat);
+        merge_channel_mats.push_back(mrmat);
 
-    content.pha_mat = pmat*255;
 
-    cv::merge(merge_channel_mats, content.merge_mat);
+        cv::merge(merge_channel_mats, content.merge_mat);
+        content.merge_mat.convertTo(content.merge_mat, CV_8UC3);
+    }
+    content.pha_mat = pmat * 255;
     content.pha_mat.convertTo(content.pha_mat, CV_8UC1);
-    content.merge_mat.convertTo(content.merge_mat, CV_8UC3);
     content.flag = true;
 }

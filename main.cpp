@@ -8,12 +8,11 @@
 using namespace std;
 
 //DEFINE_string(onnx_path, "./onnx/rvm_mobilenetv3_fp32.onnx", "where is onnx model path");
-DEFINE_string(onnx_path, "./onnx/epoch.onnx", "where is onnx model path");
-//DEFINE_string(test_path, "./TEST_01.mp4", "test path: image(png,jpg) or mp4");
+DEFINE_string(onnx_path, "./onnx/release_fp32.onnx", "where is onnx model path");
 DEFINE_string(test_path, "./1.png", "test path: image(png,jpg) or mp4");
 DEFINE_string(output_path, "./processed_1.png", "ouput file path ,default at current dir");
 DEFINE_int32(num_thread, 6, " threads nums, use num_thread to inference");
-DEFINE_double(downsample_ratio,0.25, "downsample ratio,the smaller the more fps but lowerer resolution");
+DEFINE_double(downsample_ratio,0.20, "downsample ratio,the smaller the more fps but lowerer resolution");
 DEFINE_bool(rgb, false, "default output only mask");
 
 vector <string> split_name(string path)
@@ -69,7 +68,6 @@ int main(int argc,char ** argv)
             FLAGS_output_path,
             FLAGS_downsample_ratio, 30
         );
-        
     }
 	return 0;
 }
